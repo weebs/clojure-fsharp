@@ -1,0 +1,8 @@
+(defn print-message [msg msg2] (println msg msg2))
+(= true true)
+(defn add [n1 n2] (+ n1 n2))
+(print-message "oi" "there")
+(add 2 3)
+(if true 1 1337)
+(loop [n 0] (if false (recur 1) 420))
+(loop [n 0 sum 0] (if (= n 22) sum (recur (+ n 1) (+ sum n))))
