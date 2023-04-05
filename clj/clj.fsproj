@@ -6,9 +6,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="Parser.fs" />
+    <Compile Include="Read.fs" />
     <Compile Include="clojure.core.fs" />
-    <Compile Include="Compiler.fs" />
+    <Compile Include="Eval.fs" />
     <Content Include="ReadEval_First.fs" />
     <PackageReference Include="FParsec" Version="1.1.1" />
     <!-- <PackageReference Include="FSharp.Data" /> -->

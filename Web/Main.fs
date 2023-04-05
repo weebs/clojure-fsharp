@@ -5,16 +5,16 @@ open FSharp.Data.LiteralProviders
 open Bolero
 open Bolero.Html
 
-type Model = { Source: string; Program: Clojure.Parser.Value list; Output: string list; Expr: list<Clojure.Parser.Value * Clojure.Compiler.CompiledValue> }
+type Model = { Source: string; Program: Clojure.Read.Value list; Output: string list; Expr: list<Clojure.Read.Value * Clojure.Read.Value> }
 
 type Message =
     | Compile of string | Println of string //Clojure.Compiler.CompiledValue[]
 
-let runtime = Clojure.Compiler.ClojureRuntime()
+let runtime = Clojure.Eval.ClojureRuntime()
 let update message model =
     match message with
     | Compile text ->
-        match FParsec.CharParsers.run Clojure.Parser.file text with
+        match FParsec.CharParsers.run Clojure.Read.Parser.file text with
         | FParsec.CharParsers.ParserResult.Success(tokens, _, _) ->
             let expr = tokens |> List.map (fun expr -> expr, runtime.Eval expr)
             { model with Source = text; Program = tokens; Expr = expr }
@@ -27,10 +27,10 @@ let mutable init = false
 let view model dispatch =
     if not init then
         init <- true
-        runtime.UpdateNamespace("println", Clojure.Parser.Value.CompiledFn (fun values ->
+        runtime.UpdateNamespace("println", Clojure.Read.Value.CompiledFn (fun values ->
             let line = String.concat " " (Array.map string values)
             dispatch <| Println line
-            Clojure.Parser.Value.Null
+            Clojure.Read.Value.Null
         ))
     div {
         attr.style "height: 100%"
@@ -84,5 +84,5 @@ type MyApp() =
 
     override this.Program =
         let (FParsec.CharParsers.ParserResult.Success (parsed, _, _)) =
-            FParsec.CharParsers.run Clojure.Parser.file program
+            FParsec.CharParsers.run Clojure.Read.Parser.file program
         Program.mkSimple (fun _ -> { Source = program; Program = parsed; Output = []; Expr = [] }) update view

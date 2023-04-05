@@ -1,5 +1,6 @@
-module Clojure.Compiler
-open Parser
+module Clojure.Eval
+
+open Clojure.Read
 
 type Runtime<'value, 'expr> =
     // Macro expansion occurs here
@@ -16,13 +17,18 @@ type ClojureRuntime () =
     let mutable namespaces: Map<Name, Scope ref> = Map.empty
     let mutable locals: Scope list = []
     let mutable ns = Map.empty
+    let resolveSymbol (name: string) : Value option =
+        locals
+        |> List.tryPick (fun items -> items |> Map.tryFind name)
+        |> Option.orElseWith (fun () -> ns.TryFind name)
+        
     let rec eval item : CompiledValue =
         match item with
         // todo: compile item => evalCompiled
         | Value.TokenList tokens when tokens.Length > 0 ->
             match tokens[0] with
             | Value.Symbol name ->
-                match ns.TryFind name with
+                match resolveSymbol name with
                 | Some (Value.MacroDefn defn) ->
                     eval (defn (Array.tail tokens))
                 | Some (Value.CompiledFn defn) ->
@@ -61,21 +67,28 @@ type ClojureRuntime () =
             result
         ))
         ns <- ns.Add("if", Value.Builtin (fun values ->
-            match values[0] with
+            match eval values[0] with
             | Value.Boolean true -> eval values[1]
             | _ -> eval values[2]
         ))
+        let parseDefnBindings (argNames: Value[]) (values: Value[]) =
+            match argNames |> Array.tryFindIndex (function Value.Symbol "&" -> true | _ -> false) with
+            | Some i ->
+                let args = Array.append (Array.take i argNames) (Array.skip (i + 1) argNames) |> Array.map (function Value.Symbol name -> name)
+                let values = Array.append (Array.take i values) [| (Value.Vector (Array.skip (i + 1) values)) |]
+                Map.ofArray (Array.zip args values)
+            | None -> Map.ofArray (Array.zip (argNames |> Array.map (function Value.Symbol name -> name)) values)
         ns <- ns.Add("defn", Value.MacroDefn (fun values ->
             let (Value.Symbol name) = values[0]
             let (Value.Vector args) = values[1]
             ns <- ns.Add(name, Value.CompiledFn (fun fnValues ->
-                let argsMap =
-                    match args |> Array.tryFindIndex (function Value.Symbol "&" -> true | _ -> false) with
-                    | Some i ->
-                        let args = Array.append (Array.take i args) (Array.skip (i + 1) args) |> Array.map (function Value.Symbol name -> name)
-                        let values = Array.append (Array.take i fnValues) [| (Value.Vector (Array.skip (i + 1) fnValues)) |]
-                        Map.ofArray (Array.zip args values)
-                    | None -> Map.ofArray (Array.zip (args |> Array.map (function Value.Symbol name -> name)) fnValues)
+                let argsMap = parseDefnBindings args fnValues
+                    // match args |> Array.tryFindIndex (function Value.Symbol "&" -> true | _ -> false) with
+                    // | Some i ->
+                    //     let args = Array.append (Array.take i args) (Array.skip (i + 1) args) |> Array.map (function Value.Symbol name -> name)
+                    //     let values = Array.append (Array.take i fnValues) [| (Value.Vector (Array.skip (i + 1) fnValues)) |]
+                    //     Map.ofArray (Array.zip args values)
+                    // | None -> Map.ofArray (Array.zip (args |> Array.map (function Value.Symbol name -> name)) fnValues)
                 let mutable result = Value.Null
                 locals <- argsMap :: locals
                 for expr in (Array.skip 2 values) do
@@ -147,12 +160,41 @@ type ClojureRuntime () =
             | value -> failwithf "Error: given %A for symbol name" value
             Value.Null
         ))
+        ns <- ns.Add("=", CompiledFn (fun (values: Value[]) ->
+            match values[0], values[1] with
+            | Value.Number n, Value.Number n2 -> n = n2
+            |> Value.Boolean
+        ))
+        ns <- ns.Add("do", Builtin (fun (values: Value[]) ->
+            let mutable value = Value.Null
+            for expr in values do
+                value <- eval expr
+            value))
+        ns <- ns.Add("loop", Builtin (fun (values: Value[]) ->
+            let bindingsMap = parseLetBindings values
+            let paramNames = bindingsMap.Keys |> Seq.map Value.Symbol |> Array.ofSeq
+            let exprs = Array.tail values
+            let rec loop (values: Value[]) =
+                let bindingsMap = parseDefnBindings paramNames values
+                locals <- bindingsMap :: locals
+                let mutable result = Value.Null
+                for expr in exprs do
+                    result <- eval expr
+                locals <- List.tail locals
+                result
+            let items = bindingsMap.Add("recur", CompiledFn (fun (values: Value[]) ->
+                loop values
+            ))
+            locals <- items :: locals
+            let result = loop (Array.ofSeq bindingsMap.Values)
+            locals <- List.tail locals
+            result
+        )) 
     do
         ns <- ns.Add("-", CompiledFn clojure.core.Math.subtract)
     member this.Eval = eval
     member this.UpdateNamespace(name, value) =
         ns <- ns.Add(name, value)
-    //{ new Runtime<Value.Token, CompiledValue> with
     interface Runtime<Value, CompiledValue> with
         member this.compile token = token
         member this.eval item = eval item
@@ -160,18 +202,10 @@ type ClojureRuntime () =
 
     
 [<Xunit.Fact>]
-let run_demo () =
+let infix_macro_and_addition () =
     match FParsec.CharParsers.run Parser.value "(infix (1 + 1))" with
     | (FParsec.CharParsers.ParserResult.Success (value, _, _)) ->
         let result = (ClojureRuntime () :> Runtime<_,_>).eval value
         printfn "%A" result
         Xunit.Assert.Equal(Value.Number 2, result)
     | error -> failwithf "%A" error
-// type ReferenceImplementation() =
-//     interface Runtime<Value.Token, obj> with
-//         member this.compile token =
-//             ()
-//         member this.eval value =
-//             match value with
-//             | _ -> value
-//         member this.readString(var0) = failwith "todo"

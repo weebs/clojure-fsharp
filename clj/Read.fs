@@ -1,9 +1,7 @@
-module Clojure.Parser
+module Clojure.Read
 
-open FParsec
 open System
 open System.Text
-open FParsec
 open FSharp.Data.LiteralProviders
 open FSharp.Reflection
 // open System
@@ -41,6 +39,7 @@ type Value =
         | String s -> s
         | _else -> _else.ToString()
 module Parser =
+    open FParsec
     let ident =
         
         many1Chars (noneOf [ ';'; '('; ')'; '`'; '~'; ' '; '"'; '''; '#'; '\n'; '['; ']'; '{'; '}'; ',' ])
