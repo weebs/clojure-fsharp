@@ -4,9 +4,6 @@ open System
 open System.Text
 open FSharp.Data.LiteralProviders
 open FSharp.Reflection
-// open System
-
-// module Clojure =
 type Value =
     | Null
     | TokenList of Value[]
@@ -27,11 +24,11 @@ type Value =
     | Map of (Value * Value)[]
     | HashSet of Value[]
     | NamespaceIdent of string
-// type CompiledValue =
-    // | Value of Value
+    | Atom of Value ref
     | MacroDefn of (Value[] -> Value)
     | CompiledFn of (Value[] -> Value)
     | Builtin of (Value[] -> Value)
+    | Obj of obj
     override this.ToString() =
         match this with
         | Number n -> string n
@@ -41,8 +38,8 @@ type Value =
 module Parser =
     open FParsec
     let ident =
-        
         many1Chars (noneOf [ ';'; '('; ')'; '`'; '~'; ' '; '"'; '''; '#'; '\n'; '['; ']'; '{'; '}'; ',' ])
+    let deref = pchar '@' >>. ident |>> fun ident -> TokenList [| Symbol "deref"; Symbol ident |]
     let keyword = pchar ':' >>. ident |>> Keyword
     let string = pchar '"' >>. manyChars (noneOf [ '"' ]) .>> pchar '"' |>> String
     let token = ident |>> Symbol
@@ -59,7 +56,7 @@ module Parser =
     let quoteSyntax = pchar '`' >>. value |>> QuoteSyntax
     let unquoteSplice = pstring "~@" >>. value |>> UnquoteSplice
     let quote = pchar ''' >>. value |>> Quote
-
+    let nil = pstring "nil" |>> fun _ -> Null
     let metadata = pchar '^' >>. value |>> Metadata
     let hashtagFunc = pchar '#' .>> pchar '(' >>. innerExprList .>> pchar ')' |>> InlineFunc
     let map = pchar '{' >>. many ((string <|> keyword) .>> optional spaces .>>. value .>> optional (pchar ',') .>> optional spaces) .>> pchar '}' |>> (List.toArray >> Map) 
@@ -67,13 +64,14 @@ module Parser =
     let booleanLiteral = (pstring "true" |>> fun _ -> Boolean true) <|> (pstring "false" |>> fun _ -> Boolean false)
     // let namespaceIdent = pchar ''' >>. ident |>> NamespaceIdent
 
-    let floatingPoint = many digit .>>. attempt (pchar '.') .>>. many digit |>> fun ((nums, decPt), dec) ->
+    let floatingPoint = many1 digit .>>. attempt (pchar '.') .>>. many digit |>> fun ((nums, decPt), dec) ->
         let nums = String.concat "" (List.map (fun c -> c.ToString()) nums)
         let dec = String.concat "" (List.map (fun c -> c.ToString()) dec)
-        printfn $"result = {nums}{decPt}{dec}"
         Double.Parse($"{nums}{decPt}{dec}") |> Float
     valueRef := 
         (comment <|> (attempt floatingPoint) <|> (pint64 |>> Number) <|> booleanLiteral <|>
+         deref <|>
+         nil <|>
          token <|> string <|>
          keyword <|> expr <|> vector <|> quote <|> hashtagFunc <|> map <|>
          hashset <|> quoteSyntax <|> unquote <|> unquoteSplice) .>> optional spaces

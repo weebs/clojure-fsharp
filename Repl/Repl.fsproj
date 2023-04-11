@@ -6,6 +6,8 @@
     </PropertyGroup>
     <ItemGroup>
       <ProjectReference Include="../clj/clj.fsproj" />
+        
+      <PackageReference Include="FSharp.Compiler.Service" Version="41.0.7" />
       <Compile Include="Program.fs" />
       <Content Include="test.clj" />
     </ItemGroup>

@@ -1,6 +1,7 @@
 module Clojure.Eval
 
 open Clojure.Read
+open Microsoft.FSharp.Reflection
 
 type Runtime<'value, 'expr> =
     // Macro expansion occurs here
@@ -26,21 +27,27 @@ type ClojureRuntime () =
         match item with
         // todo: compile item => evalCompiled
         | Value.TokenList tokens when tokens.Length > 0 ->
-            match tokens[0] with
-            | Value.Symbol name ->
-                match resolveSymbol name with
-                | Some (Value.MacroDefn defn) ->
-                    eval (defn (Array.tail tokens))
-                | Some (Value.CompiledFn defn) ->
-                    // todo: resolve Symbols before call
-                    defn (Array.tail tokens |> Array.map eval)
-                | Some (Value.Builtin form) ->
-                    form (Array.skip 1 tokens)
-                | Some value -> value
-                | _ ->
+            let rec callExpr expr args =
+                match expr with
+                | Value.Symbol name ->
+                    match resolveSymbol name with
+                    | Some (Value.MacroDefn defn) ->
+                        eval (defn (Array.tail tokens))
+                    | Some (Value.CompiledFn defn) ->
+                        // todo: resolve Symbols before call
+                        defn (Array.tail tokens |> Array.map eval)
+                    | Some (Value.Builtin form) ->
+                        form (Array.skip 1 tokens)
+                    | Some value -> value
+                    | _ ->
+                        failwithf "Token %A is not callable" tokens[0]
+                | Value.CompiledFn fn ->
+                    fn (Array.skip 1 tokens)
+                | Value.TokenList values ->
+                    callExpr (eval (Value.TokenList values)) args 
+                | value ->
                     failwithf "Token %A is not callable" tokens[0]
-            | _ -> 
-                failwithf "Token %A is not callable" tokens[0]
+            callExpr tokens[0] (Array.skip 1 tokens)
         | Value.Symbol name ->
             locals
             |> List.tryPick (fun items -> items |> Map.tryFind name)
@@ -78,24 +85,32 @@ type ClojureRuntime () =
                 let values = Array.append (Array.take i values) [| (Value.Vector (Array.skip (i + 1) values)) |]
                 Map.ofArray (Array.zip args values)
             | None -> Map.ofArray (Array.zip (argNames |> Array.map (function Value.Symbol name -> name)) values)
-        ns <- ns.Add("defn", Value.MacroDefn (fun values ->
-            let (Value.Symbol name) = values[0]
-            let (Value.Vector args) = values[1]
-            ns <- ns.Add(name, Value.CompiledFn (fun fnValues ->
+        ns <- ns.Add("fn", Value.Builtin (fun values ->
+            // todo: name
+            let (Value.Vector args) = values[0]
+            Value.CompiledFn (fun fnValues ->
                 let argsMap = parseDefnBindings args fnValues
-                    // match args |> Array.tryFindIndex (function Value.Symbol "&" -> true | _ -> false) with
-                    // | Some i ->
-                    //     let args = Array.append (Array.take i args) (Array.skip (i + 1) args) |> Array.map (function Value.Symbol name -> name)
-                    //     let values = Array.append (Array.take i fnValues) [| (Value.Vector (Array.skip (i + 1) fnValues)) |]
-                    //     Map.ofArray (Array.zip args values)
-                    // | None -> Map.ofArray (Array.zip (args |> Array.map (function Value.Symbol name -> name)) fnValues)
                 let mutable result = Value.Null
                 locals <- argsMap :: locals
-                for expr in (Array.skip 2 values) do
+                for expr in (Array.skip 1 values) do // todo
                     result <- eval expr
                 locals <- List.tail locals
                 result
-            ))
+            )
+        ))
+        ns <- ns.Add("defn", Value.MacroDefn (fun values ->
+            (Value.TokenList [| Value.Symbol "def"; values[0]; Value.TokenList [| Value.Symbol "fn"; yield! (Array.skip 1 values) |] |])
+        ))
+        ns <- ns.Add("atom", Value.CompiledFn (fun values -> Value.Atom (ref values[0])))
+        ns <- ns.Add("deref", Value.CompiledFn (fun values ->
+            match values with
+            | [| Value.Atom ref |] -> ref.contents
+            | _ -> failwithf "Couldn't deref %A" values
+        ))
+        ns <- ns.Add("reset!", Value.CompiledFn (fun values ->
+            match values with
+            | [| Value.Atom ref; value |] -> ref.contents <- value
+            | _ -> failwithf "Couldn't set %A" values
             Value.Null
         ))
         ns <- ns.Add("+", Value.CompiledFn (fun values ->
@@ -124,9 +139,16 @@ type ClojureRuntime () =
             | _ -> failwithf "Invalid args for infix: %A" tokens
         ))
         ns <- ns.Add("println", Value.CompiledFn (fun values ->
-            printfn "%A" values
+            System.Console.WriteLine(String.concat " " (Array.map string values))
             Value.Null
         ))
+        ns <- ns.Add("def", Value.Builtin (fun values ->
+            System.Console.WriteLine (sprintf "%A" values)
+            match values with
+            | [| Value.Symbol name; value |] -> ns <- ns.Add(name, eval value)
+            Value.Null
+        ))
+        
         ns <- ns.Add("defmacro", Value.MacroDefn (fun tokens ->
             match tokens[0] with
             | Value.Symbol name ->
@@ -192,6 +214,21 @@ type ClojureRuntime () =
         )) 
     do
         ns <- ns.Add("-", CompiledFn clojure.core.Math.subtract)
+        ns <- ns.Add("/", CompiledFn clojure.core.Math.division)
+        ns <- ns.Add("*", CompiledFn clojure.core.Math.mult)
+        ns <- ns.Add(".", MacroDefn (fun (exprs: Value[]) ->
+            let rec unwrap (value: Value) =
+                match value with
+                | Null -> null
+                | _ -> (snd (FSharpValue.GetUnionFields (value, value.GetType())))[0]
+            match eval exprs[0], Array.tail exprs with
+            | Value.Obj o, [| Value.Symbol s |] -> Value.Obj <| o.GetType().GetMember(s).[0]
+            | Value.Obj o, values ->
+                match values[0] with
+                | Value.Symbol s ->
+                    let info = (o.GetType().GetMember(s)[0] :?> System.Reflection.MethodInfo)
+                    Value.Obj (info.Invoke(o, Array.map unwrap (Array.map eval <| Array.tail values)))
+        ))
     member this.Eval = eval
     member this.UpdateNamespace(name, value) =
         ns <- ns.Add(name, value)
