@@ -11,11 +11,14 @@
     <Compile Include="Eval.fs" />
     <Content Include="ReadEval_First.fs" />
     <PackageReference Include="FParsec" Version="1.1.1" />
+    <PackageReference Include="FSharp.Collections.ParallelSeq" Version="1.2.0" />
     <!-- <PackageReference Include="FSharp.Data" /> -->
     <PackageReference Include="FSharp.Data.LiteralProviders" Version="1.0.3" />
     <Content Include="*.clj" />
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="*" />
-    <PackageReference Include="xunit" Version="*" />
+<!--    <PackageReference Include="FSharpPlus" Version="1.4.1" />-->
+<!--    <PackageReference Include="FSharpx.Core" Version="1.8.32" />-->
+<!--    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="*" />-->
+<!--    <PackageReference Include="xunit" Version="*" />-->
   </ItemGroup>
 
 </Project>

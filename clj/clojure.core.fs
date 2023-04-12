@@ -3,6 +3,7 @@ module clojure.core
 open System
 open Clojure.Read
 
+
 let println (values: Value[]) =
     let s = String.concat " " (Array.map string values)
     Console.WriteLine(s)
