@@ -16,8 +16,8 @@ let update message model =
     | Compile text ->
         match FParsec.CharParsers.run Clojure.Read.Parser.file text with
         | FParsec.CharParsers.ParserResult.Success(tokens, _, _) ->
-            let expr = tokens |> List.map (fun expr -> expr, runtime.Eval expr)
-            { model with Source = text; Program = tokens; Expr = expr }
+            let expr = tokens |> List.map (fun (expr, src) -> expr, runtime.Eval expr)
+            { model with Source = text; Program = tokens |> List.map fst; Expr = expr }
         | error -> printfn "%A" error; model
     | Println output -> { model with Output = output :: model.Output }
 
@@ -85,4 +85,4 @@ type MyApp() =
     override this.Program =
         let (FParsec.CharParsers.ParserResult.Success (parsed, _, _)) =
             FParsec.CharParsers.run Clojure.Read.Parser.file program
-        Program.mkSimple (fun _ -> { Source = program; Program = parsed; Output = []; Expr = [] }) update view
+        Program.mkSimple (fun _ -> { Source = program; Program = parsed |> List.map fst; Output = []; Expr = [] }) update view

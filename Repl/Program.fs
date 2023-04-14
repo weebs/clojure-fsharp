@@ -20,24 +20,68 @@ let deserializeList (text: string) =
     text.Split(";;\n") |> Array.toList
 
 let _newline = char "\013" // \r
+let ignoredKeys = [|
+    ConsoleKey.Backspace
+|]
+let removeCharAt (i: int) (s: string) =
+    if i = 0 then s.Substring(1)
+    else s.Substring(0, i - 1) + s.Substring(i, s.Length - i)
+
+let insertAt (i: int) (src: string) (dest: string) =
+    dest.Substring(0, i) + src + dest.Substring(i)
 type Buffer = { contents: string; cursor: int; }
     with
     member this.Update(key: ConsoleKeyInfo) =
         match key with
+        | c when c.KeyChar = '(' ->
+            { this with
+                cursor = this.cursor + 1
+                contents = this.contents |> insertAt this.cursor "()" }
+        | c when c.KeyChar = ')' && this.contents.Length > this.cursor && this.contents[this.cursor] = ')' ->
+            { this with cursor = this.cursor + 1 }
+        | c when c.KeyChar = ')' ->
+            match this.contents.IndexOf(")", this.cursor) with
+            | -1 -> this
+            | index -> { this with cursor = index + 1 }
         | c when c.Key = ConsoleKey.Backspace &&
                  this.contents.Length > 0 &&
                  this.cursor > 0 ->
-            { this with
-                contents =
-                    this.contents.Substring(0, this.cursor - 1) +
-                    this.contents.Substring(this.cursor, this.contents.Length - this.cursor)
-                cursor = this.cursor - 1 }
+            
+            Console.CursorLeft <- Console.CursorLeft - 2
+            printf "  "
+            let start = 
+                { this with
+                    contents = this.contents |> removeCharAt this.cursor
+                    cursor = this.cursor - 1 }
+            
+            
+            if this.contents[this.cursor - 1] = '(' then
+                let matchingBrace =
+                    let rec loop count (s: string) =
+                        if s.Length = 0 then None
+                        elif s[0] = ')' then Some count
+                        else loop (count + 1) (s.Substring(1))
+                        
+                    loop this.cursor <| this.contents.Substring(this.cursor)
+                match matchingBrace with
+                | Some index ->
+                    let column = Console.CursorLeft
+                    Console.CursorLeft <- column + 2 + index
+                    
+                    printf " "
+                    Console.CursorLeft <- column
+                    { start with
+                        contents = start.contents |> removeCharAt index }
+                | None ->
+                    start
+            else
+                start
         | c when c.Key = ConsoleKey.Home -> { this with cursor = 0 }
         | c when c.Key = ConsoleKey.LeftArrow && this.cursor > 0 ->
             { this with cursor = this.cursor - 1 }
         | c when c.Key = ConsoleKey.RightArrow && this.cursor < this.contents.Length ->
             { this with cursor = this.cursor + 1 }
-        | c when Char.IsControl(c.KeyChar) = false ->
+        | c when Char.IsControl(c.KeyChar) = false && not <| Array.contains c.Key ignoredKeys ->
             { this with
                 contents =
                     this.contents.Substring(0, this.cursor) +
@@ -72,65 +116,66 @@ if Environment.GetEnvironmentVariable("clojure_running") = "true" then
         printfn "waiting"; Thread.Sleep(100)
 task {
     Environment.SetEnvironmentVariable("clojure_running", "true")
-    let fsi = FSharp.Compiler.Interactive.Shell.FsiEvaluationSession.Create (fsiConfig, [| ""; "--multiemit-" |], inStream, outStream, errStream)
-    fsi.AddBoundValue ("_FSI", fsi)
-    fsi.AddBoundValue("eval", box (fun (s: string) -> fsi.EvalInteraction s))
-    // fsi.EvalInteraction "FSI.EvalInteraction \"printfn \"1234 i declare a thumb war\"\""
-    fsi.EvalInteraction """printfn "%A" <| eval.GetType().GetMethod("Invoke").Invoke(eval, [| "printfn \"%d\" 1234" |])"""
-    fsi.EvalInteraction """printfn "%A" <| _FSI.GetType().GetMethod("EvalInteraction").Invoke(_FSI, [| "printfn \"%d\" 1234"; null |])"""
-    rt.UpdateNamespace("fsi", Value.Obj fsi)
-    Console.Write("clojure> ")
-    
-    let mutable buffer = { contents = ""; cursor = 0 }
-    let mutable index = -1
-    let reprintPrompt () =
-        Console.CursorLeft <- 0
-        Console.Write "clojure> "
-        printf "%s" buffer.contents
-        let n = Console.CursorLeft
-        for i in n..(Console.BufferWidth - n) do
-            printf " "
-        // TODO handle inputs that span multiple lines
-        Console.CursorLeft <- n - (buffer.contents.Length - buffer.cursor)
-    
-    while Environment.GetEnvironmentVariable("clojure_running") = "true" do
-        if Console.KeyAvailable then
-            match Console.ReadKey() with
-            | key when key.KeyChar = _newline ->
-                let line = buffer.contents
-                printf "\n"
-                inputHistory <- line :: inputHistory
-                IO.File.WriteAllText ("history.json", serializeList inputHistory)
-                index <- -1
-                try
-                    match run Parser.value line with
-                    | ParserResult.Success(expr, _, _) ->
-                        rt.Eval expr
-                        |> function
-                        | value -> printfn "%A" value
-                    | error -> printfn "%A" error
-                with runtimeException -> printfn "%A" runtimeException
-                Console.Write("clojure> ")
-                buffer <- { contents = ""; cursor = 0 }
-            | c when c.Key = ConsoleKey.DownArrow && index = 0 ->
-                index <- -1
-                buffer <- { contents = ""; cursor = 0 }
-                reprintPrompt ()
-            | c when c.Key = ConsoleKey.DownArrow && index > 0 ->
-                index <- index - 1
-                buffer <- { contents = inputHistory[index]; cursor = inputHistory[index].Length }
-                reprintPrompt ()
-            | c when c.Key = ConsoleKey.UpArrow && inputHistory.Length > index + 1 ->
-                index <- index + 1
-                buffer <- { contents = inputHistory[index]; cursor = inputHistory[index].Length }
-                reprintPrompt ()
-            | c ->
-                buffer <- buffer.Update(c)
-                reprintPrompt ()
-        else
-            do! Async.Sleep 100
-    
-    Environment.SetEnvironmentVariable("clojure_running", "false")
+    try
+        let fsi = FSharp.Compiler.Interactive.Shell.FsiEvaluationSession.Create (fsiConfig, [| ""; "--multiemit-" |], inStream, outStream, errStream)
+        fsi.AddBoundValue ("_FSI", fsi)
+        fsi.AddBoundValue("eval", box (fun (s: string) -> fsi.EvalInteraction s))
+        // fsi.EvalInteraction "FSI.EvalInteraction \"printfn \"1234 i declare a thumb war\"\""
+        fsi.EvalInteraction """printfn "%A" <| eval.GetType().GetMethod("Invoke").Invoke(eval, [| "printfn \"%d\" 1234" |])"""
+        fsi.EvalInteraction """printfn "%A" <| _FSI.GetType().GetMethod("EvalInteraction").Invoke(_FSI, [| "printfn \"%d\" 1234"; null |])"""
+        rt.UpdateNamespace("fsi", Value.Obj fsi)
+        Console.Write("clojure> ")
+        
+        let mutable buffer = { contents = ""; cursor = 0 }
+        let mutable index = -1
+        let reprintPrompt () =
+            Console.CursorLeft <- 0
+            Console.Write "clojure> "
+            printf "%s" buffer.contents
+            let n = Console.CursorLeft
+            // for i in n..(Console.BufferWidth - n) do
+            //     printf " "
+            // TODO handle inputs that span multiple lines
+            Console.CursorLeft <- n - (buffer.contents.Length - buffer.cursor)
+        
+        while Environment.GetEnvironmentVariable("clojure_running") = "true" do
+            if Console.KeyAvailable then
+                match Console.ReadKey() with
+                | key when key.KeyChar = _newline && buffer.cursor >= buffer.contents.Trim().Length - 1 ->
+                    let line = buffer.contents
+                    printf "\n"
+                    inputHistory <- line :: inputHistory
+                    IO.File.WriteAllText ("history.json", serializeList inputHistory)
+                    index <- -1
+                    try
+                        match run Parser.value line with
+                        | ParserResult.Success(expr, _, _) ->
+                            rt.Eval expr
+                            |> function
+                            | value -> printfn "%A" value
+                        | error -> printfn "%A" error
+                    with runtimeException -> printfn "%A" runtimeException
+                    Console.Write("clojure> ")
+                    buffer <- { contents = ""; cursor = 0 }
+                | c when c.Key = ConsoleKey.DownArrow && index = 0 ->
+                    index <- -1
+                    buffer <- { contents = ""; cursor = 0 }
+                    reprintPrompt ()
+                | c when c.Key = ConsoleKey.DownArrow && index > 0 ->
+                    index <- index - 1
+                    buffer <- { contents = inputHistory[index]; cursor = inputHistory[index].Length }
+                    reprintPrompt ()
+                | c when c.Key = ConsoleKey.UpArrow && inputHistory.Length > index + 1 ->
+                    index <- index + 1
+                    buffer <- { contents = inputHistory[index]; cursor = inputHistory[index].Length }
+                    reprintPrompt ()
+                | c ->
+                    buffer <- buffer.Update(c)
+                    reprintPrompt ()
+            else
+                do! Async.Sleep 100
+    finally
+        Environment.SetEnvironmentVariable("clojure_running", "false")
 } |> fun t ->
     #if !INTERACTIVE
     t.Wait()

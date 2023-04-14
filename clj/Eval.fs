@@ -75,7 +75,7 @@ type ClojureRuntime () as this =
                     | Value.Keyword keyword ->
                         match innerLoop stack args.[0] with
                         // | Value.HashSet values -> Value.Null
-                        | Value.Map values -> values[keyword]
+                        | Value.Map values -> values[Keyword keyword]
                         | _else -> Value.Null
                     | value ->
                         failwithf "Token %A is not callable" tokens[0]

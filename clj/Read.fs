@@ -101,12 +101,12 @@ module Parser =
         value
     let hashtagFunc = pchar '#' .>> pchar '(' >>. innerExprList .>> pchar ')' |>> InlineFunc
     let map = pchar '{' >>. many ((string <|> keyword) .>> optional spaces .>>. value .>> optional (pchar ',') .>> optional spaces) .>> pchar '}' |>> fun values ->
-        Map.ofList [
+       (Dictionary<_,_>(), Map.ofList [
             for (key, value) in values do
                 match key with
                 | Value.Keyword key
                 | Value.String key -> yield key, value
-        ] |> Map
+        ] |> Map.toArray) ||> Array.fold (fun dictionary (key, item) -> dictionary.Add(Keyword key, item); dictionary) |> Map
     let hashset = pchar '#' >>. pchar '{' >>. innerExprList .>> pchar '}' |>> HashSet
     let booleanLiteral = (pstring "true" |>> fun _ -> Boolean true) <|> (pstring "false" |>> fun _ -> Boolean false)
     // let namespaceIdent = pchar ''' >>. ident |>> NamespaceIdent
