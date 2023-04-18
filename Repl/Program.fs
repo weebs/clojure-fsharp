@@ -27,7 +27,7 @@ let removeCharAt (i: int) (s: string) =
     if i = 0 then s.Substring(1)
     else s.Substring(0, i - 1) + s.Substring(i, s.Length - i)
 
-let insertAt (i: int) (src: string) (dest: string) =
+let update (i: int) (src: string) (dest: string) =
     dest.Substring(0, i) + src + dest.Substring(i)
 type Buffer = { contents: string; cursor: int; }
     with
@@ -36,7 +36,7 @@ type Buffer = { contents: string; cursor: int; }
         | c when c.KeyChar = '(' ->
             { this with
                 cursor = this.cursor + 1
-                contents = this.contents |> insertAt this.cursor "()" }
+                contents = this.contents |> update this.cursor "()" }
         | c when c.KeyChar = ')' && this.contents.Length > this.cursor && this.contents[this.cursor] = ')' ->
             { this with cursor = this.cursor + 1 }
         | c when c.KeyChar = ')' ->
@@ -83,10 +83,14 @@ type Buffer = { contents: string; cursor: int; }
             { this with cursor = this.cursor + 1 }
         | c when Char.IsControl(c.KeyChar) = false && not <| Array.contains c.Key ignoredKeys ->
             { this with
-                contents =
-                    this.contents.Substring(0, this.cursor) +
-                    (string c.KeyChar) + this.contents.Substring(this.cursor, this.contents.Length - this.cursor)
+                contents = update this.cursor (string c.KeyChar) this.contents
+                    // this.contents.Substring(0, this.cursor) +
+                    // (string c.KeyChar) + this.contents.Substring(this.cursor, this.contents.Length - this.cursor)
                 cursor = this.cursor + 1  }
+        | c when c.KeyChar = _newline ->
+            { this with
+                cursor = this.cursor + 1
+                contents = this.contents |> update this.cursor "\n" }
         | c ->
             match c.Key with
             | ConsoleKey.End -> { this with cursor = this.contents.Length } | _ -> this
@@ -133,7 +137,7 @@ task {
             Console.CursorLeft <- 0
             sb.Append "clojure> "
             sb.Append (sprintf "%s" buffer.contents)
-            let n = sb.Length
+            let n = sb.ToString().Split("\n") |> Array.last |> fun line -> line.Length
             for i in n..(Console.BufferWidth - n) do
                 sb.Append " "
             // TODO handle inputs that span multiple lines
@@ -143,6 +147,9 @@ task {
         while Environment.GetEnvironmentVariable("clojure_running") = "true" do
             if Console.KeyAvailable then
                 match Console.ReadKey() with
+                | key when key.KeyChar = _newline && buffer.cursor < buffer.contents.Trim().Length - 1 ->
+                    buffer <- buffer.Update(key)
+                    reprintPrompt ()
                 | key when key.KeyChar = _newline &&
                            (buffer.cursor >= buffer.contents.Trim().Length - 1 || (run Parser.value buffer.contents |> function | Success _ -> true | _ -> false)) ->
                     let line = buffer.contents
