@@ -10,6 +10,7 @@
     <Compile Include="clojure.core.fs" />
     <Compile Include="Eval.fs" />
     <Content Include="ReadEval_First.fs" />
+    <Content Include="sbcl.lisp" />
     <PackageReference Include="FParsec" Version="1.1.1" />
     <PackageReference Include="FSharp.Collections.ParallelSeq" Version="1.2.0" />
     <!-- <PackageReference Include="FSharp.Data" /> -->
