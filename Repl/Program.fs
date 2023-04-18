@@ -54,7 +54,20 @@ type Buffer = { contents: string; cursor: int; }
                     contents = this.contents |> removeCharAt this.cursor
                     cursor = this.cursor - 1 }
             
-            
+            let findMatchingBrace (forwards: bool) =
+                let rec loop count (s: string) =
+                    if forwards then
+                        if s.Length = 0 then None
+                        elif s[0] = ')' then Some count
+                        else loop (count + 1) (s.Substring(1))
+                    else
+                        if s[count] = '(' then Some count
+                        elif count = 0 then None
+                        else loop (count - 1) s
+                    
+                if forwards then loop this.cursor <| this.contents.Substring(this.cursor)
+                else loop (Math.Min(this.cursor, this.contents.Length - 1)) this.contents
+                
             if this.contents[this.cursor - 1] = '(' then
                 let matchingBrace =
                     let rec loop count (s: string) =
@@ -72,6 +85,15 @@ type Buffer = { contents: string; cursor: int; }
                     Console.CursorLeft <- column
                     { start with
                         contents = start.contents |> removeCharAt index }
+                | None ->
+                    start
+            elif this.contents[this.cursor - 1] = ')' then
+                match findMatchingBrace false with
+                | Some index ->
+                    let buffer = start.contents |> removeCharAt index 
+                    { start with
+                        cursor = Math.Min(this.cursor, buffer.Length)
+                        contents = buffer }
                 | None ->
                     start
             else
@@ -142,7 +164,8 @@ task {
                 sb.Append " "
             // TODO handle inputs that span multiple lines
             printf "%s" (sb.ToString())
-            Console.CursorLeft <- n - (buffer.contents.Length - buffer.cursor)
+            Console.CursorLeft <- Math.Max(n - (buffer.contents.Length - buffer.cursor), 0)
+        
         
         while Environment.GetEnvironmentVariable("clojure_running") = "true" do
             if Console.KeyAvailable then
@@ -184,8 +207,9 @@ task {
                     reprintPrompt ()
             else
                 do! Async.Sleep 100
-    finally
-        Environment.SetEnvironmentVariable("clojure_running", "false")
+    with error ->
+        printfn "%A" error
+    Environment.SetEnvironmentVariable("clojure_running", "false")
 } |> fun t ->
     #if !INTERACTIVE
     t.Wait()
