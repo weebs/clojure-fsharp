@@ -129,19 +129,22 @@ task {
         let mutable buffer = { contents = ""; cursor = 0 }
         let mutable index = -1
         let reprintPrompt () =
+            let sb = StringBuilder()
             Console.CursorLeft <- 0
-            Console.Write "clojure> "
-            printf "%s" buffer.contents
-            let n = Console.CursorLeft
-            // for i in n..(Console.BufferWidth - n) do
-            //     printf " "
+            sb.Append "clojure> "
+            sb.Append (sprintf "%s" buffer.contents)
+            let n = sb.Length
+            for i in n..(Console.BufferWidth - n) do
+                sb.Append " "
             // TODO handle inputs that span multiple lines
+            printf "%s" (sb.ToString())
             Console.CursorLeft <- n - (buffer.contents.Length - buffer.cursor)
         
         while Environment.GetEnvironmentVariable("clojure_running") = "true" do
             if Console.KeyAvailable then
                 match Console.ReadKey() with
-                | key when key.KeyChar = _newline && buffer.cursor >= buffer.contents.Trim().Length - 1 ->
+                | key when key.KeyChar = _newline &&
+                           (buffer.cursor >= buffer.contents.Trim().Length - 1 || (run Parser.value buffer.contents |> function | Success _ -> true | _ -> false)) ->
                     let line = buffer.contents
                     printf "\n"
                     inputHistory <- line :: inputHistory
