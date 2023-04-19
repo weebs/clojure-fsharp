@@ -69,14 +69,7 @@ type Buffer = { contents: string; cursor: int; }
                 else loop (Math.Min(this.cursor, this.contents.Length - 1)) this.contents
                 
             if this.contents[this.cursor - 1] = '(' then
-                let matchingBrace =
-                    let rec loop count (s: string) =
-                        if s.Length = 0 then None
-                        elif s[0] = ')' then Some count
-                        else loop (count + 1) (s.Substring(1))
-                        
-                    loop this.cursor <| this.contents.Substring(this.cursor)
-                match matchingBrace with
+                match findMatchingBrace true with
                 | Some index ->
                     let column = Console.CursorLeft
                     Console.CursorLeft <- column + 2 + index
@@ -113,6 +106,14 @@ type Buffer = { contents: string; cursor: int; }
             { this with
                 cursor = this.cursor + 1
                 contents = this.contents |> update this.cursor "\n" }
+        | c when c.KeyChar = char "\004" && c.Modifiers = ConsoleModifiers.Control ->
+            // todo: move ) paren past next expr
+            { this with
+                contents = this.contents }
+        | c when c.KeyChar = '\001' && c.Modifiers = ConsoleModifiers.Control ->
+            // todo: move ( paren before prev expr
+            { this with
+                contents = this.contents }
         | c ->
             match c.Key with
             | ConsoleKey.End -> { this with cursor = this.contents.Length } | _ -> this
@@ -203,6 +204,10 @@ task {
                     buffer <- { contents = inputHistory[index]; cursor = inputHistory[index].Length }
                     reprintPrompt ()
                 | c ->
+                    if c.Modifiers = ConsoleModifiers.Control then
+                        printfn "Modifiers = %A" c.Modifiers
+                        printfn "%A" c.KeyChar
+                        // todo: slurp + barf
                     buffer <- buffer.Update(c)
                     reprintPrompt ()
             else

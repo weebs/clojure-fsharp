@@ -131,7 +131,7 @@ module Parser =
         // manyChars (noneOf [ ')' ]) .>> pchar ')' .>> 
         optional spaces
         |>> List.toArray
-    let file = manyTill ((optional spaces >>. optional (skipMany comment) >>. ((attempt comment .>>. getPosition) <|> (expr .>>. getPosition) <|> (optional eof .>>. getPosition |>> fun (_, p) -> Comment "EOF", p)) |>> Some .>> optional spaces)) eof |>> List.choose id
+    let file = manyTill ((optional spaces >>. optional (skipMany comment) >>. ((getPosition .>>. attempt comment .>>. getPosition) <|> (getPosition .>>. expr .>>. getPosition) <|> (getPosition .>>. optional eof .>>. getPosition |>> fun ((start, _), p) -> ((start, Comment "EOF"), p)) |>> Some .>> optional spaces))) eof |>> List.choose id
         // manyCharsTill anyChar (parenthesis <|> (pchar ')' |>> fun _ -> [])) .>> pchar ')' |>> fun foo -> Tokens text :: items
 
     // this can fix the type errors

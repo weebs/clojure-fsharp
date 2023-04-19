@@ -6,8 +6,14 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <Compile Include="Program.fs"/>
+        <Compile Include="Program.fs" />
+        <Content Include="*.clj" />
+        <ProjectReference Include="../DI.FSharp/DI.FSharp.fsproj" />
         <ProjectReference Include="../clj/clj.fsproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <PackageReference Include="FSharp.Data.LiteralProviders" Version="1.0.3" />
     </ItemGroup>
 
 </Project>
