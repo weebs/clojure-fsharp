@@ -25,7 +25,7 @@ let filewatch filepath callback cancellation =
 
 
 let rt = ClojureRuntime()
-let codePath = (__SOURCE_DIRECTORY__ + "/raymarcher.clj")
+let codePath = (__SOURCE_DIRECTORY__ + "/maths.3d.clj")
 let testCode = System.IO.File.ReadAllText codePath
 
 let getRange (lines: string[]) (start: FParsec.Position) (_end: FParsec.Position) =
@@ -39,7 +39,9 @@ let getRange (lines: string[]) (start: FParsec.Position) (_end: FParsec.Position
     sb.AppendLine(lines[int _end.Line - 1].Substring(0, int _end.Column - 1))
     |> ignore
   sb.ToString()
-  
+
+let result = FParsec.CharParsers.run Read.Parser.file "(deftype Point [^long x ^long y])"
+printfn "%A" result
 let run testCode =
   try
     match FParsec.CharParsers.run Read.Parser.file testCode with
@@ -58,7 +60,8 @@ let run testCode =
         // printfn "yo"
         ()
         
-      | _else -> printfn "%A" _else
+      | error ->
+        printfn $"%A{error}"; printfn ""
   with error -> printfn "%A" error
 try
   let t = Dependency.repl <| fun () ->

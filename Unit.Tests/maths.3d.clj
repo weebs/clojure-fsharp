@@ -3,13 +3,16 @@
   )
 ;(require '[quil.core :as q])
 (deftype Point [^long x ^long y])
-(require '[clj-async-profiler.core :as prof])
-(require '[quil.core :as q])
+;(require '[clj-async-profiler.core :as prof])
+;(require '[quil.core :as q])
 (def t (atom 0))
+
+;(defn math-abs [value]
+;  (try
+;    (if (< value 0) (* -1 value) value)
+;    (catch Exception e (println e))))
 (defn math-abs [value]
-  (try
-    (if (< value 0) (* -1 value) value)
-    (catch Exception e (println e))))
+  (if (< value 0) (* -1 value) value))
 
 (defn math-max [a b] (if (> a b) a b))
 
@@ -25,7 +28,7 @@
 (println "\u001b[38;2;255;255;255m")
 ;(defn vec3-mult)
 ;(foo (Point. 420 20))
-(def p (ref {:x 420 :y 840}))
+;(def p (ref {:x 420 :y 840}))
 ; (defn -main [& args] (foo "lol"))
 
 ; point : x y z
@@ -214,6 +217,7 @@
     ;(println "Second " (quat-mult (quat-mult q P) q1))
     (dissoc r :w)))
 (defn cast-ray [sdfFromPoint ^Vec3 startingPoint ^Vec3 directionVector ^Vec3 lightPos]
+  (debug)
   (loop [n 0
          point startingPoint
          minStep 500
@@ -305,9 +309,10 @@
   )
 
 (defn sdf-sphere [^Vec3 p ^Vec3 c ^double r]
-  (try
-    (- (vec-length (vec-subtr c p)) r)
-    (catch Exception e (println e))))
+  (- (vec-length (vec-subtr c p)) r)
+;  (try
+;    (catch Exception e (println e)))
+  )
 (defn sdf-box [origin widthHeight point]
   (let [rotation {:x (+ @t 1.2) :y 1 :z 0 :w 1}
         offsetFromShapeOrigin (rotate-point (vec-subtr point origin) rotation)
@@ -482,12 +487,12 @@
   ;  (q/ellipse x y diam diam))
   )
 ;(if (or (not (resolve 'sketch)) (= nil (eval 'sketch)))
-  (def sketch (q/defsketch example                          ;; Define a new sketch named example
-                           :title "SDF in Clojure"          ;; Set the title of the sketch
-                           :settings #(q/smooth 2)          ;; Turn on anti-aliasing
-                           :setup setup                     ;; Specify the setup fn
-                           :draw draw                       ;; Specify the draw fn
-                           :size [323 200])
-    )                ;; You struggle to beat the golden ratio
+;  (def sketch (q/defsketch example                          ;; Define a new sketch named example
+;                           :title "SDF in Clojure"          ;; Set the title of the sketch
+;                           :settings #(q/smooth 2)          ;; Turn on anti-aliasing
+;                           :setup setup                     ;; Specify the setup fn
+;                           :draw draw                       ;; Specify the draw fn
+;                           :size [323 200])
+;    )                ;; You struggle to beat the golden ratio
   (reset! results nil)
 ;; Draw a circle at x y with the correct diameter

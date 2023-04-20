@@ -11,8 +11,40 @@ let println (values: Value[]) =
     
 let printfn (values: Value[]) =
     Console.WriteLine(String.concat " " (Array.map (sprintf "%A") values))
-    
+                                
 module Math =
+    let gt (values: Value[]) : Value =
+        // TODO GADT returns / ops in AST
+        match values[0], values[1] with
+        | Value.Number n, Value.Number n2 -> (n > n2)
+        | Value.Number n, Value.Float n2 -> (float n > n2)
+        | Value.Float n, Value.Number n2 -> (float n > float n2)
+        | Value.Float n, Value.Float n2 -> (n > n2)
+        | Value.String s, Value.String s2 -> (s > s2)
+        |> Value.Boolean
+        
+    let lt (values: Value[]) : Value =
+        match values[0], values[1] with
+        | Value.Number n, Value.Number n2 -> (n < n2)
+        | Value.Number n, Value.Float n2 -> (float n < n2)
+        | Value.Float n, Value.Number n2 -> (float n < float n2)
+        | Value.Float n, Value.Float n2 -> (n < n2)
+        | Value.String s, Value.String s2 -> (s < s2)
+        |> Value.Boolean
+        
+        
+        
+    let abs = CompiledFn <| fun (values: Value[]) ->
+        match values[0] with
+        | Number n -> Number <| Math.Abs(n)
+        | Float f -> Float <| Math.Abs(f)
+    let _mod (values: Value[]) : Value =
+        match values[0], values[1] with
+        | Value.Number n, Value.Number n2 -> n % n2 |> Number
+        | Value.Number n, Value.Float n2 -> float n % n2 |> Float
+        | Value.Float n, Value.Number n2 -> n % float n2 |> Float
+        | Value.Float n, Value.Float n2 -> float n % n2 |> Float
+        
     let subtract (values: Value[]) : Value =
         if values.Length = 1 then
             match values[0] with
