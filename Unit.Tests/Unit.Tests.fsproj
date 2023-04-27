@@ -6,6 +6,7 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <Compile Include="Console.fs" />
         <Compile Include="Program.fs" />
         <Content Include="*.clj" />
         <ProjectReference Include="../DI.FSharp/DI.FSharp.fsproj" />
@@ -14,6 +15,8 @@
 
     <ItemGroup>
       <PackageReference Include="FSharp.Data.LiteralProviders" Version="1.0.3" />
+      <PackageReference Include="FSharp.Quotations.Evaluator" Version="2.1.0" />
+      <PackageReference Include="Mono.Cecil" Version="0.11.5" />
     </ItemGroup>
 
 </Project>

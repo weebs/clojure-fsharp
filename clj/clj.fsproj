@@ -2,7 +2,8 @@
 
   <PropertyGroup>
 <!--    <OutputType>Exe</OutputType>-->
-    <TargetFramework>net6.0</TargetFramework>
+<!--    <TargetFramework>net6.0</TargetFramework>-->
+    <TargetFramework>netstandard2.0</TargetFramework>
   </PropertyGroup>
 
   <ItemGroup>
@@ -11,11 +12,13 @@
     <Compile Include="Eval.fs" />
     <Content Include="ReadEval_First.fs" />
     <Content Include="sbcl.lisp" />
+    <Compile Include="Source.fs" />
     <PackageReference Include="FParsec" Version="1.1.1" />
     <PackageReference Include="FSharp.Collections.ParallelSeq" Version="1.2.0" />
     <!-- <PackageReference Include="FSharp.Data" /> -->
     <PackageReference Include="FSharp.Data.LiteralProviders" Version="1.0.3" />
     <Content Include="*.clj" />
+    <PackageReference Include="FSharp.Interop.Dynamic" Version="5.0.1.268" />
 <!--    <PackageReference Include="FSharpPlus" Version="1.4.1" />-->
 <!--    <PackageReference Include="FSharpx.Core" Version="1.8.32" />-->
 <!--    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="*" />-->

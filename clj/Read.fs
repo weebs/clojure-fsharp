@@ -1,28 +1,31 @@
 module Clojure.Read
 
 open System.Collections.Generic
-open System.Collections.Immutable
+// open System.Collections.Immutable
 open System.Runtime.CompilerServices
 open System
 open System.Text
 open System.Threading
-open FSharp.Data.LiteralProviders
+open FSharp.Interop.Dynamic
+    
+// open FSharp.Data.LiteralProviders
 open FSharp.Reflection
 // type Atom<'t when 't : equality and 't : not struct> = private { mutable value: 't } with
 type Atom<'t when 't : not struct> = private { mutable value: 't } with
 
-    static member Init value = { value = value }
-    static member get a = a.value
     static member set (a: Atom<'t>) (value: 't) =
         let rec loop (original: 't) =
-            if (original :> obj) = (Interlocked.CompareExchange<'t> (&a.value, value, original)) then ()
+            let value = Interlocked.CompareExchange(&a.value, value, original)
+            if (original :> obj) = (value :> obj) then ()
             else loop a.value
         loop a.value
+    static member Init value = { value = value }
+    static member get a = a.value
     // static member set (a: Atom<'t>) (value: 't) =
     //     Atom.Set this value
     static member Swap (a: Atom<'t>) (updater: 't -> 't) =
         let rec loop (original: 't) =
-            if (original :> obj) = Interlocked.CompareExchange<'t> (&a.value, updater a.value, original) then ()
+            if (original :> obj) = (Interlocked.CompareExchange<'t> (&a.value, updater a.value, original) :> obj) then ()
             else loop a.value
         loop a.value
     member this.swap (updater: 't -> 't) =
@@ -47,7 +50,8 @@ and Value =
     | InlineFunc of Value[]
     // | Metadata of Value * Value
     // | Map of Dictionary<Value, Value>
-    | Map of ImmutableDictionary<string, Value>
+    // | Map of ImmutableDictionary<string, Value>
+    | Map of Map<string, Value>
     | HashSet of Value[]
     | NamespaceIdent of string
     | MacroDefn of (Value[] -> Value)
@@ -67,6 +71,13 @@ and Value =
         | Float f -> string f
         | String s -> s
         | Keyword k -> ":" + k
+        | Map m ->
+            let keyvalues = String.concat " " (seq {
+                for kv in m do yield $"{kv.Key} {kv.Value}"
+                // for kv in m.Seq do yield (sprintf "%s %A" kv.Key kv.Value)
+            })
+            sprintf "{%s}" keyvalues
+            // $"{{{keyvalues}}}"
         | _else -> sprintf "%A" this
         
 
@@ -78,7 +89,7 @@ type ClojureType =
     
 type Namespace = { name: string; imports: obj; bound: Map<string, Value> }
     
-let metdataTable = ConditionalWeakTable<Value, Value>()
+let varDataTable = ConditionalWeakTable<Value, Value>()
 module Parser =
     open FParsec
     let tryMany p =
@@ -102,7 +113,26 @@ module Parser =
         many1Chars (noneOf [ ':'; ';'; '('; ')'; '`'; '~'; ' '; '"'; '''; '#'; '\n'; '['; ']'; '{'; '}'; ',' ])
     let deref = pchar '@' >>. ident |>> fun ident -> List [| Symbol "deref"; Symbol ident |]
     let keyword = pchar ':' >>. ident |>> Keyword
-    let string = pchar '"' >>. manyChars (noneOf [ '"' ]) .>> pchar '"' |>> String
+    let string = pchar '"' >>. manyChars (noneOf [ '"' ]) .>> pchar '"' |>> fun text ->
+        let indexes = [|
+            for i in 0..(text.Length - 2) do
+                if text.[i] = char "\\" && text.[i + 1] = 'u' then yield i
+        |]
+        // Convert \uNNNN base16 to unicode
+        let convertParts (separator: string) (length: int) (_base: int) (text: string) =
+            let parts = text.Split([| separator |], StringSplitOptions.RemoveEmptyEntries)
+            let parts = [|
+                yield parts.[0]
+                for i in 1..(parts.Length - 1) do
+                    yield
+                        string (Convert.ToChar(Convert.ToInt32(parts.[i].Substring(0, length), _base)))
+                        + parts.[i].Substring(length, parts.[i].Length - length)
+            |]
+            (String.concat "" parts)
+        text
+        |> convertParts "\\u" 4 16
+        |> convertParts "\\x" 2 16
+        |> String       
     let token = ident |>> Symbol
     let (innerExprList, innerExprListRef) : Parser<Value[], _> * _ = createParserForwardedToRef ()
     let (value, valueRef) : Parser<Value, _> * _ = createParserForwardedToRef ()
@@ -121,7 +151,7 @@ module Parser =
     let quote = pchar ''' >>. value |>> Quote
     let nil = pstring "nil" |>> fun _ -> Null
     let metadata = pchar '^' >>. value .>>. value |>> fun (metadata, value) ->
-        metdataTable.Add(value, metadata)
+        varDataTable.Add(value, metadata)
         value
     let hashtagFunc = pchar '#' .>> pchar '(' >>.  innerExprList .>> pchar ')' |>> InlineFunc
     let map = pchar '{' >>. (optional spaces) >>. many ((string <|> keyword) .>> optional spaces .>>. value .>> optional (pchar ',') .>> optional spaces) .>> pchar '}' |>> fun values ->
@@ -149,7 +179,8 @@ module Parser =
     let floatingPoint = attempt (pstring "-" <|> (fun stream -> Reply(""))) .>>. many1 digit .>>. attempt (pchar '.') .>>. many digit |>> fun (((sign, nums), decPt), dec) ->
         let nums = String.concat "" (List.map (fun c -> c.ToString()) nums)
         let dec = String.concat "" (List.map (fun c -> c.ToString()) dec)
-        Double.Parse($"{sign}{nums}{decPt}{dec}") |> Float
+        // Double.Parse($"{sign}{nums}{decPt}{dec}") |> Float
+        Double.Parse(sign + nums + decPt.ToString() + dec) |> Float
     // let (<|>) (p1: Parser<_,_>) p2 =
     //     fun (stream: CharStream<_>) ->
     //         let mutable stateTag = stream.StateTag
@@ -160,19 +191,22 @@ module Parser =
     //             if stateTag = stream.StateTag then
     //                 reply.Error <- mergeErrors reply.Error error
     //         reply
+    let DEBUG = false
     let (>>!) (p1: Parser<_,_>) (msg: 'a) =
-        fun (stream: CharStream<_>) ->
-            printfn "%A" msg
-            let line = stream.Line
-            let col = stream.Column
-            let reply = p1 stream
-            if reply.Status = Error then
-                ()
-            elif reply.Status = Ok then
-                printfn "parsed %A %d %d" msg (stream.Line) (stream.Column)
-            elif reply.Status = FatalError then
-                printfn "Exiting"
-            reply
+        if DEBUG then
+            fun (stream: CharStream<_>) ->
+                printfn "%A" msg
+                let line = stream.Line
+                let col = stream.Column
+                let reply = p1 stream
+                if reply.Status = Error then
+                    ()
+                elif reply.Status = Ok then
+                    printfn "parsed %A %d %d" msg (stream.Line) (stream.Column)
+                elif reply.Status = FatalError then
+                    printfn "Exiting"
+                reply
+        else p1
     let tryParse p =
         printfn "attempting %A" p
         let mutable result = Primitives.attempt p
@@ -247,3 +281,8 @@ module Parser =
     // this can fix the type errors
     match run file "" with
     | _ -> ()
+module Dlr =
+    let dlrTest () =
+        let dynamic = Dynamic.ExpandoObject()
+        Dyn.set "foo" dynamic 1
+        printfn "%A" <| Dyn.get "foo" dynamic
