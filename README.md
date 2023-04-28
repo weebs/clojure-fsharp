@@ -19,3 +19,10 @@ I've been wanting to learn more about interpreters, and rather than create my ow
 
 # Motivations Pt 2
 - If I spend any more time fighting with Mono v462 and the FCS API I'm going to uninstall programming.so and stop flipping tables
+
+# Design (WIP)
+- Reader using FParsec to parse strings into Clojure's basic forms (lists, vectors, numbers, etc)
+- Recursive Eval function that walks the AST and evaluates the forms
+  - Function execution is interpreted
+  - Macros are values (an inconsistency with clojure) and their expansion occurs on every evaluation, this was initially an oversight but something I am keeping around as a future feature
+- Immutable data types have been used to represent the runtime state of the interpreter for no reason in particular (lol)
