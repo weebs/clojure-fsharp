@@ -25,4 +25,9 @@ I've been wanting to learn more about interpreters, and rather than create my ow
 - Recursive Eval function that walks the AST and evaluates the forms
   - Function execution is interpreted
   - Macros are values (an inconsistency with clojure) and their expansion occurs on every evaluation, this was initially an oversight but something I am keeping around as a future feature
-- Immutable data types have been used to represent the runtime state of the interpreter for no reason in particular (lol)
+- Immutable data types have been used to represent the runtime state of the interpreter for no reason in particular (lol, unless? ...)
+
+# Hosting in Valheim with BepInEx 
+- UnityRuntime used for console output display
+ 
+![Picture](unity_demo.png)
